@@ -274,10 +274,13 @@ git push -u origin LR1
 
 ## Шаг 9. Pull Request и Peer Review
 
-Создан Pull Request **LR1 → main**. В качестве ревьюеров указаны одногруппники; после проверки кода
-скрипта и отчёта они оставляют комментарии и аппрувы, после чего ветка сливается в `main`.
+Создан Pull Request **LR1 → main** (base: `main`, compare: `LR1`). После этого к PR добавляются
+ревьюеры-одногруппники: они проверяют код скрипта и отчёт во вкладке Files Changed, оставляют
+комментарии и аппрувы, после чего выполняется слияние ветки в `main`.
 
-Pull Request: <https://github.com/matiksiatik/lr1-unity-build/pulls>
+**Pull Request #1:** <https://github.com/matiksiatik/lr1-unity-build/pull/1>
+
+![Pull Request #1: LR1 → main](screenshots/09_pull_request.png)
 
 ---
 
