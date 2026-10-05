@@ -1,0 +1,57 @@
+name: Sanity Check и зеркалирование
+
+# Триггер: рабочий процесс запускается при каждом push в репозиторий
+on: [push]
+
+jobs:
+  # Задача 1: автоматическая проверка структуры проекта (Sanity Check)
+  sanity_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Проверка структуры проекта
+        run: |
+          echo "=== Sanity Check: проверка структуры проекта ==="
+          fail=0
+          check_path() {
+            if [ -e "$1" ]; then
+              echo "[OK]     $1"
+            else
+              echo "[ОШИБКА] $1 - не найден"
+              fail=1
+            fi
+          }
+          check_path "Assets"
+          check_path "Assets/Editor/BuildManager.cs"
+          check_path "Assets/Scenes/SampleScene.unity"
+          check_path "ProjectSettings/ProjectSettings.asset"
+          check_path "Packages/manifest.json"
+          check_path "README.md"
+          check_path ".gitignore"
+          check_path ".github/workflows/main.yml"
+          if [ "$fail" -ne 0 ]; then
+            echo "Sanity Check НЕ ПРОЙДЕН: структура проекта нарушена!"
+            exit 1
+          fi
+          echo "Sanity Check пройден: структура проекта корректна."
+
+  # Задача 2: зеркалирование репозитория в резервный (выполняется после sanity_check)
+  mirror_repo:
+    needs: sanity_check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (полная история коммитов)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Зеркалирование в резервный репозиторий
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          git checkout --detach
+          git fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' --force --prune
+          git remote remove origin
+          git push --mirror "https://x-access-token:${BACKUP_TOKEN}@github.com/matiksiatik/lr1-unity-build-backup.git"
