@@ -1,0 +1,18 @@
+# Контекст Docker-сборки: только то, что реально копируется в образ
+# (Dockerfile использует лишь nginx.conf и Builds/WebGL/)
+.git
+.github
+Assets
+Packages
+ProjectSettings
+Library
+Temp
+Logs
+UserSettings
+obj
+screenshots
+.vsconfig
+*.csproj
+*.slnx
+*.log
+*.md

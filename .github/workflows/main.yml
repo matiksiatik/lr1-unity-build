@@ -57,3 +57,41 @@ jobs:
           git remote remove origin
           git config --local --unset-all "http.https://github.com/.extraheader" || true
           git push --mirror "https://x-access-token:${BACKUP_TOKEN}@github.com/matiksiatik/lr1-unity-build-backup.git"
+
+  # Задача 3: сборка и публикация Docker-образа в GitHub Container Registry (GHCR).
+  # Папка Builds/ отсечена .gitignore, поэтому на раннере создаются временные
+  # файлы-заглушки .gz — их хватит, чтобы Docker-сборка завершилась успешно
+  # (реальная облачная сборка Unity будет подключена в ЛР №4).
+  docker_publish:
+    needs: sanity_check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Создание временных файлов-заглушек .gz для сборки образа
+        run: |
+          mkdir -p Builds/WebGL/Build Builds/WebGL/TemplateData
+          touch Builds/WebGL/index.html
+          touch Builds/WebGL/TemplateData/style.css
+          touch Builds/WebGL/Build/WebGL.loader.js
+          touch Builds/WebGL/Build/WebGL.framework.js.gz
+          touch Builds/WebGL/Build/WebGL.wasm.gz
+          touch Builds/WebGL/Build/WebGL.data.gz
+
+      - name: Вход в GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Сборка и публикация образа в GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/matiksiatik/lr1-unity-build:${{ github.sha }}
