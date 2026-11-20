@@ -82,7 +82,6 @@ public class EnemyDeathTests
                 "EnemyDeath должен отключать коллайдер врага!");
             Assert.IsFalse(enemy.GetComponent<AnimationController>().enabled,
                 "EnemyDeath должен отключать EnemyController врага!");
-            Assert.AreEqual(1, 2, "DEMO: intentionally broken test");
             Assert.Greater(player.velocity.y, 0f,
                 "Игрок должен отскочить вверх после прыжка на врага (Bounce)!");
         }
