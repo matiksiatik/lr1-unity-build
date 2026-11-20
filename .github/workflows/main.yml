@@ -1,15 +1,16 @@
-name: Sanity Check и зеркалирование
+# Название всего автоматического процесса
+name: Unity 2D Platformer CI/CD
 
-# Триггер: рабочий процесс запускается при каждом push в репозиторий
+# Условие запуска: реагировать на любой push в репозиторий
 on: [push]
 
 jobs:
-  # Задача 1: автоматическая проверка структуры проекта (Sanity Check)
+  # ЗАДАЧА 1: Быстрая диагностика структуры проекта (Sanity Check)
   sanity_check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Запуск на бесплатном облачном сервере Linux
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4 # Скачиваем код проекта на облачный сервер
 
       - name: Проверка структуры проекта
         run: |
@@ -26,6 +27,9 @@ jobs:
           check_path "Assets"
           check_path "Assets/Editor/BuildManager.cs"
           check_path "Assets/Scenes/SampleScene.unity"
+          check_path "Assets/Tests/EditMode/PlayerTests.cs"
+          check_path "Assets/Tests/PlayMode/PlayerHealthTests.cs"
+          check_path "Assets/Scripts/GameAssembly.asmdef"
           check_path "ProjectSettings/ProjectSettings.asset"
           check_path "Packages/manifest.json"
           check_path "README.md"
@@ -37,9 +41,61 @@ jobs:
           fi
           echo "Sanity Check пройден: структура проекта корректна."
 
-  # Задача 2: зеркалирование репозитория в резервный (выполняется после sanity_check)
+  # ЭТАП 2 (ЛР №4): Автоматический запуск тестов Unity
+  run_tests:
+    needs: sanity_check # Тесты запускаются сразу после проверки структуры проекта
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true # Активируем поддержку Git LFS, если в игре есть тяжелая графика
+
+      # Создаем кэш для папки Library, чтобы тесты запускались быстрее
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ hashFiles('Packages/packages-lock.json', 'Assets/**/*.asmdef') }}
+
+      # Официальный CLI GameCI с фиксированной версией
+      - name: Install GameCI CLI
+        run: |
+          curl -sL -o game-ci.tar.gz https://github.com/game-ci/cli/releases/download/v0.1.72/game-ci-linux-x64.tar.gz
+          tar xzf game-ci.tar.gz ./game-ci
+          echo "$PWD" >> $GITHUB_PATH
+
+      # Запуск тестов EditMode и PlayMode в контейнере unityci/editor.
+      # CLI вызывается напрямую, а не через game-ci/unity-test-runner@v4:
+      # текущий экшен формирует флаг --no-coverageEnabled, которого CLI
+      # v0.1.72 не понимает (Unknown argument, exit code 1). Рабочая форма -
+      # --coverageEnabled=false. Coverage отключен, т.к. инструментирование
+      # кода роняет Unity 6 в контейнере (SIGSEGV, exit code 139).
+      - name: Run Unity Tests
+        run: |
+          game-ci test --docker --dockerShmSize=1025m \
+            --engine=unity --testPlatforms='playmode;editmode;COMBINE_RESULTS' \
+            --engineVersion=6000.6.0f1 --coverageEnabled=false \
+            --artifactsPath=artifacts --dockerIsolationMode=default \
+            --containerRegistryRepository=unityci/editor \
+            --containerRegistryImageVersion=3
+        env:
+          # Секреты лицензии Unity для активации редактора на раннере
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      # Сохраняем результаты и логи тестов артефактами (даже при падении)
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: artifacts/
+
+  # ЗАДАЧА 2: Автоматическое зеркалирование в резервный репозиторий
   mirror_repo:
-    needs: sanity_check
+    needs: run_tests # Зеркалирование начнется только после успешных тестов
+    if: github.repository == 'matiksiatik/lr1-unity-build' # Только в оригинальном репо, чтобы избежать цикла в backup
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (полная история коммитов)
@@ -58,40 +114,46 @@ jobs:
           git config --local --unset-all "http.https://github.com/.extraheader" || true
           git push --mirror "https://x-access-token:${BACKUP_TOKEN}@github.com/matiksiatik/lr1-unity-build-backup.git"
 
-  # Задача 3: сборка и публикация Docker-образа в GitHub Container Registry (GHCR).
-  # Папка Builds/ отсечена .gitignore, поэтому на раннере создаются временные
-  # файлы-заглушки .gz — их хватит, чтобы Docker-сборка завершилась успешно
-  # (реальная облачная сборка Unity будет подключена в ЛР №4).
-  docker_publish:
-    needs: sanity_check
+  # ЭТАП 3: Автоматическая сборка Docker-образа в облако
+  build_docker_image:
+    needs: run_tests # Docker начнет собираться ТОЛЬКО если тесты прошли успешно!
     runs-on: ubuntu-latest
+    # Разрешаем этой конкретной задаче публиковать пакеты
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Создание временных файлов-заглушек .gz для сборки образа
+      - name: Create Compressed Placeholders for Docker
+        # Генерируем фейковые .gz файлы, чтобы шаг COPY в Dockerfile не упал
+        # без реального билда Unity
         run: |
           mkdir -p Builds/WebGL/Build Builds/WebGL/TemplateData
-          touch Builds/WebGL/index.html
-          touch Builds/WebGL/TemplateData/style.css
-          touch Builds/WebGL/Build/WebGL.loader.js
-          touch Builds/WebGL/Build/WebGL.framework.js.gz
-          touch Builds/WebGL/Build/WebGL.wasm.gz
-          touch Builds/WebGL/Build/WebGL.data.gz
+          if [ -z "$(ls -A Builds/WebGL/Build)" ]; then
+            echo "<h3>Unity 6 Compressed Game Cloud Layer</h3>" > Builds/WebGL/index.html
+            touch Builds/WebGL/TemplateData/style.css
+            touch Builds/WebGL/Build/WebGL.loader.js
+            touch Builds/WebGL/Build/WebGL.framework.js.gz
+            touch Builds/WebGL/Build/WebGL.wasm.gz
+            touch Builds/WebGL/Build/WebGL.data.gz
+            echo "Создана временная структура сжатых файлов для сборщика Docker."
+          fi
 
-      - name: Вход в GitHub Container Registry (GHCR)
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Системный автоматический токен GitHub
 
-      - name: Сборка и публикация образа в GHCR
-        uses: docker/build-push-action@v6
+      - name: Build and Push Compressed Docker Image
+        uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
-          tags: ghcr.io/matiksiatik/lr1-unity-build:${{ github.sha }}
+          tags: |
+            ghcr.io/matiksiatik/lr1-unity-build:latest
+            ghcr.io/matiksiatik/lr1-unity-build:${{ github.sha }}
