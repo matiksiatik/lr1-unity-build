@@ -72,13 +72,13 @@ Actions так, чтобы облачная компиляция игры и с�
 
 *Рис. 3. GitHub Actions: все задачи (`sanity_check`, `run_tests`, `mirror_repo`, `build_docker_image`) зелёные.*
 
-![Лог run_tests](screenshots/lr4_04_actions_log.png)
+![Вкладка Actions](screenshots/lr4_04_actions_list.png)
 
-*Рис. 4. Лог задачи `run_tests`: запуск тестов GameCI CLI в контейнере unityci/editor.*
+*Рис. 4. Вкладка Actions: список прогонов пайплайна Unity 2D Platformer CI/CD.*
 
 ![Артефакт test-results](screenshots/lr4_05_artifacts.png)
 
-*Рис. 5. Артефакт `test-results` с XML-результатами EditMode и PlayMode.*
+*Рис. 5. Страница прогона: артефакт `test-results` с XML-результатами EditMode и PlayMode.*
 
 ![Папка Assets/Tests в репозитории](screenshots/lr4_06_repo_tests.png)
 
@@ -90,7 +90,7 @@ Actions так, чтобы облачная компиляция игры и с�
 
 ![Сборка не запускается](screenshots/lr4_08_actions_blocked.png)
 
-*Рис. 8. При красном `run_tests` задачи `mirror_repo` и `build_docker_image` не запускаются.*
+*Рис. 8. Детали задачи `run_tests`: упавший шаг Run Unity Tests (GameCI CLI, exit code 1).*
 
 ![README с таблицей LR1-LR4](screenshots/lr4_09_readme_table.png)
 
